@@ -8,6 +8,8 @@
 #include <sensor_msgs/PointCloud2.h>
 #include <thread>
 
+#include "common_lib.h"
+
 using namespace std;
 
 typedef pcl::PointXYZI PointXYZI;
@@ -28,6 +30,31 @@ ros::Publisher pubColorScan;
 
 Eigen::Matrix4d T_ItoC;
 
+bool color_pcd_save=false;
+std::string color_pcd_path;
+std::string undistort_lid_topic;
+std::string odo_topic;
+std::string iamge_topic;
+vector<double> t_LtoC(3,0.0);
+vector<double> R1_LtoC(9,0.0);
+vector<double> angle2_LtoC(3,0.0);
+
+vector<double> t_LtoI(3,0.0);
+vector<double> R_LtoI(9,0.0);
+
+V3D t_Lidar_to_Camera(Zero3d);
+M3D R1_Lidar_to_Camera(Eye3d);
+//double theta2_Lidar_to_Camera=0.0;
+V3D angle2_Lidar_to_Camera(Zero3d);
+M3D R2_Lidar_to_Camera(Eye3d);
+M3D R_Lidar_to_Camera(Eye3d);
+
+V3D t_Lidar_to_IMU(Zero3d);
+M3D R_Lidar_to_IMU(Eye3d);
+
+M3D T_IMU_to_Camera(Eye3d);
+ 
+
 Eigen::Matrix3d euler2RotationMatrix(const double roll, const double pitch, const double yaw)  
 {  
     Eigen::AngleAxisd rollAngle(roll, Eigen::Vector3d::UnitZ());  
@@ -39,7 +66,7 @@ Eigen::Matrix3d euler2RotationMatrix(const double roll, const double pitch, cons
     // Eigen::Quaterniond q = yawAngle * pitchAngle * rollAngle;
     Eigen::Matrix3d R = q.matrix();  
     cout << "Euler2RotationMatrix result is:" <<endl;  
-    cout << "R ="  << endl << R << endl<<endl;  
+    cout << "R2 ="  << endl << R << endl<<endl;  
     return R;  
 } 
 
@@ -71,6 +98,10 @@ inline void transformPointcloud(T pointcloud_in, Eigen::Matrix4d pose, T pointcl
     }
 }
 
+//colorCloud(T_ItoC, 1,
+//                               cv::imdecode(imageBuf.front()->data, cv::IMREAD_COLOR),
+//                               laserCloudFullRes, rgb_cloud);
+
 ///Color the point cloud by rgb image using given extrinsic
 void colorCloud(const Eigen::Matrix4d &extrinsic, const int density, const cv::Mat &rgb_img,
                 const pcl::PointCloud<pcl::PointXYZI>::Ptr &lidar_cloud,
@@ -99,10 +130,14 @@ void colorCloud(const Eigen::Matrix4d &extrinsic, const int density, const cv::M
     //         (cv::Mat_<double>(3, 3) << 335.98935910072163, 0.0, 321.54095972138805, 0.0, 337.72547533979923, 242.29014923895363, 0.0, 0.0, 1.0);
     // cv::Mat distortion_coeff =
     //         (cv::Mat_<double>(1, 5) << 0.0295468362381083, -0.0368281839741105, 0.0003400102248715159, 0.0027803141687075144, 0.0);
+    //cv::Mat camera_matrix =
+    //        (cv::Mat_<double>(3, 3) << 337.0953202882733, 0.0, 320.82946369947115, 0.0, 338.6261023193472, 241.39493263182715, 0.0, 0.0, 1.0);
+    //cv::Mat distortion_coeff =
+    //        (cv::Mat_<double>(1, 5) << 0.027465858974681987, -0.03202877927009086, -0.00011069561591140865, 0.0009081003185256085, 0.0);
     cv::Mat camera_matrix =
-            (cv::Mat_<double>(3, 3) << 337.0953202882733, 0.0, 320.82946369947115, 0.0, 338.6261023193472, 241.39493263182715, 0.0, 0.0, 1.0);
+            (cv::Mat_<double>(3, 3) << 600.4923, 0.5563, 622.7455, 0.0, 601.001, 311.2729, 0.0, 0.0, 1.0);
     cv::Mat distortion_coeff =
-            (cv::Mat_<double>(1, 5) << 0.027465858974681987, -0.03202877927009086, -0.00011069561591140865, 0.0009081003185256085, 0.0);
+            (cv::Mat_<double>(1, 5) << 0.0033, -0.0211, 0.0066, -0.0023, -0.0018);
     cv::Mat r_vec =
             (cv::Mat_<double>(3, 1)
                      << rotation_vector3.angle() * rotation_vector3.axis().transpose()[0],
@@ -170,6 +205,7 @@ void process() {
                                                                 odometryBuf.front()->pose.pose.orientation.x,
                                                                 odometryBuf.front()->pose.pose.orientation.y,
                                                                 odometryBuf.front()->pose.pose.orientation.z)
+                                                     .normalized()
                                                      .toRotationMatrix();
                     pose.block<3, 1>(0, 3) = Eigen::Vector3d(odometryBuf.front()->pose.pose.position.x,
                                                              odometryBuf.front()->pose.pose.position.y,
@@ -181,7 +217,8 @@ void process() {
 
                     sensor_msgs::PointCloud2 colorlaserCloudMsg;
                     pcl::toROSMsg(*rgb_cloud_transformed, colorlaserCloudMsg);
-                    colorlaserCloudMsg.header.frame_id = "map";
+                    //colorlaserCloudMsg.header.frame_id = "map";
+                    colorlaserCloudMsg.header.frame_id="camera_init";
                     colorlaserCloudMsg.header.stamp = odometryBuf.front()->header.stamp;
                     std::cout << "------------------------------------------------------------------" <<std::endl;
                     pubColorScan.publish(colorlaserCloudMsg);
@@ -195,7 +232,7 @@ void process() {
                         imageBuf.front()->header.stamp.toSec()) {
                         //                        std::cout << "odometry time small image time" << std::endl;
                         odometryBuf.pop();
-                        undistortLaserCloudBuf.pop();
+                        //undistortLaserCloudBuf.pop();
                         bufMutex.unlock();
                         continue;
                     }
@@ -260,19 +297,33 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "colorPointclouds");
     ros::NodeHandle nh;
 
+     nh.param<bool>("pcd_save/color_pcd_save",color_pcd_save, false);
+     nh.param<std::string>("pcd_save/color_pcd_path",color_pcd_path,"./color_pcd");
+     nh.param<std::string>("publish/undistort_lid_topic",undistort_lid_topic,"/cloud_registered");
+     nh.param<std::string>("publish/odometry",odo_topic,"/Odometry");
+     nh.param<std::string>("common/image_topic",iamge_topic,"/camera/image/compressed");
+     nh.param<vector<double>>("extrinsic_LtoC/t_LtoC", t_LtoC, vector<double>());
+     nh.param<vector<double>>("extrinsic_LtoC/R1_LtoC", R1_LtoC, vector<double>());
+     nh.param<vector<double>>("extrinsic_LtoC/angle2_LtoC", angle2_LtoC, vector<double>());
+     nh.param<vector<double>>("mapping/extrinsic_T", t_LtoI, vector<double>());
+     nh.param<vector<double>>("mapping/extrinsic_R", R_LtoI, vector<double>());
+
     ros::Subscriber subLaserCloudUndistort = nh.subscribe<sensor_msgs::PointCloud2>(
-            "/intercept_cloud",
+            undistort_lid_topic,
+            //"/intercept_cloud",
             // "/cloud_registered",
             100,
             laserCloudUndistortHandler);
 
     ros::Subscriber subLaserOdometry = nh.subscribe<nav_msgs::Odometry>(
-            "/Odometry",
+            odo_topic,
+            //"/Odometry",
             100,
             laserOdometryHandler);
 
     ros::Subscriber subCompressedImage = nh.subscribe<sensor_msgs::CompressedImage>(
-            "/jackal/camera_f/compressed",
+            iamge_topic,
+            //"/jackal/camera_f/compressed",
             100,
             compressedImageHandler);
 
@@ -298,7 +349,74 @@ int main(int argc, char **argv) {
     //         0, 0, 1, 0.1,
     //         0.000000000000, 0.000000000000, 0.000000000000, 1.000000000000;
 
-    Eigen::Matrix3d init_camera_r;
+    /*V3D t_Lidar_to_Camera(Zero3d);
+M3D R1_Lidar_to_Camera(Eye3d);
+
+M3D R_Lidar_to_Camera(Eye3d);*/
+    t_Lidar_to_Camera<<VEC_FROM_ARRAY(t_LtoC);
+    R1_Lidar_to_Camera<<MAT_FROM_ARRAY(R1_LtoC);
+    angle2_Lidar_to_Camera<<VEC_FROM_ARRAY(angle2_LtoC);
+
+    t_Lidar_to_IMU<<VEC_FROM_ARRAY(t_LtoI);
+    R_Lidar_to_IMU<<MAT_FROM_ARRAY(R_LtoI);
+
+    //std::cout<<"R1_Lidar_to_Camera:"<<std::endl;
+    //std::cout<<R1_Lidar_to_Camera<<std::endl;
+
+    //std::cout<<"R_Lidar_to_IMU:"<<std::endl;
+    //std::cout<<R_Lidar_to_IMU<<std::endl;
+
+
+
+    //Z-Roll，X-Pitch，Y-Yaw
+    R2_Lidar_to_Camera=euler2RotationMatrix(angle2_Lidar_to_Camera(0)*3.1415926/180,angle2_Lidar_to_Camera(1)*3.1415926/180,angle2_Lidar_to_Camera(2)*3.1415926/180);
+    std::cout<<"R2_Lidar_to_Camera:"<<std::endl;
+    std::cout<<R2_Lidar_to_Camera<<std::endl;
+    //R2_Lidar_to_Camera(0,0)=1.0;
+    //R2_Lidar_to_Camera(0,1)=0.0;
+    //R2_Lidar_to_Camera(0,2)=0.0;
+    //R2_Lidar_to_Camera(1,0)=0.0;
+    //R2_Lidar_to_Camera(1,1)=cos(3.1415926*theta2_LtoC/180);
+    //R2_Lidar_to_Camera(1,2)=-sin(3.1415926*theta2_LtoC/180);
+    //R2_Lidar_to_Camera(2,0)=0.0;
+    //R2_Lidar_to_Camera(2,1)=sin(3.1415926*theta2_LtoC/180);
+    //R2_Lidar_to_Camera(2,2)=cos(3.1415926*theta2_LtoC/180);
+
+
+
+
+    //std::cout<<"R2_Lidar_to_Camera:"<<std::endl;
+    //std::cout<<R2_Lidar_to_Camera<<std::endl;
+    //for(int i=0; i<3; i++){
+    //    for(int j=0; j<3; j++){
+    //        std::cout<<R2_Lidar_to_Camera(i,j)<<"       ";
+    //    }
+    //    std::cout<<"\n";
+    //}
+
+    
+
+    R_Lidar_to_Camera=R2_Lidar_to_Camera*R1_Lidar_to_Camera;
+    std::cout<<"R_Lidar_to_Camera:"<<std::endl;
+    std::cout<<R_Lidar_to_Camera<<std::endl;
+
+    Eigen::Matrix4d T_Lidar_to_Camera=Eigen::Matrix4d::Identity();
+    T_Lidar_to_Camera.block<3,3>(0,0)=R_Lidar_to_Camera;
+    T_Lidar_to_Camera.block<3,1>(0,3)=t_Lidar_to_Camera;
+    std::cout<<"T_Lidar_to_Camera:"<<std::endl;
+    std::cout<<T_Lidar_to_Camera<<std::endl;
+
+    Eigen::Matrix4d T_Lidar_to_IMU=Eigen::Matrix4d::Identity();
+    T_Lidar_to_IMU.block<3,3>(0,0)=R_Lidar_to_IMU;
+    T_Lidar_to_IMU.block<3,1>(0,3)=t_Lidar_to_IMU;
+    std::cout<<"T_Lidar_to_IMU:"<<std::endl;
+    std::cout<<T_Lidar_to_IMU<<std::endl;
+
+    T_ItoC=T_Lidar_to_Camera*T_Lidar_to_IMU.inverse();
+    std::cout<<"T_IMU_to_Camera:"<<std::endl;
+    std::cout << T_ItoC << std::endl;
+
+    /*Eigen::Matrix3d init_camera_r;
     double init_xyz[3] = {0.1,0.28,-0.08};
     init_camera_r = euler2RotationMatrix((1.57 - 3.1415926*1.2/180),-3.1415926*0/180,-(1.57 + 3.1415926*7/180));
 
@@ -313,8 +431,8 @@ int main(int argc, char **argv) {
     {
         T_ItoC(cti , 3) = init_xyz[cti];
     }
-    T_ItoC(3 , 3) = 1;
-    cout << T_ItoC << endl;
+    T_ItoC(3 , 3) = 1;*/
+    
 
 //          T_ItoC <<6.34136e-07 ,         -1 ,0.000796326,-0.2,
 // 0.000796326 ,0.000796327   , 0.999999,0,
@@ -325,9 +443,24 @@ int main(int argc, char **argv) {
     ros::spin();
 
     ///Output rgb map
-    RGBPointCloudPtr rgb_map(new RGBPointCloud());
-    for (int i = 0; i < vector_rgb_scan.size(); ++i) {
-        *rgb_map += vector_rgb_scan[i];
+
+    if(color_pcd_save){
+        //RGBPointCloudPtr rgb_map(new RGBPointCloud());
+        //for (int i = 0; i < vector_rgb_scan.size(); ++i) {
+        //    *rgb_map += vector_rgb_scan[i];
+        //}
+        //std::string save_color_pcd=color_pcd_path+"/color_pointcloud.pcd";
+        //std::cout << "rgb_map size is " << *rgb_map.size() << std::endl;
+        //pcl::io::savePCDFile(save_color_pcd, *rgb_map);
+
+        
+        for (int i = 0; i < vector_rgb_scan.size(); ++i) {
+            RGBPointCloudPtr rgb_map(new RGBPointCloud());
+            *rgb_map = vector_rgb_scan[i];
+            std::string save_color_pcd=color_pcd_path+"/color_pointcloud_"+std::to_string(i)+".pcd";
+            pcl::io::savePCDFile(save_color_pcd, *rgb_map);
+        }
+        
     }
-    // pcl::io::savePCDFile("/home/llc/mulit_robot_fast_lio_sim/color_pcl/color_map.pcd", *rgb_map);
+    
 }

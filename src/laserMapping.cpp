@@ -119,12 +119,25 @@ pcl::VoxelGrid<PointType> downSizeFilterMap;
 
 KD_TREE<PointType> ikdtree;
 
+/*
+typedef Vector3d V3D;
+typedef Matrix3d M3D;
+typedef Vector3f V3F;
+typedef Matrix3f M3F;
+M3D Eye3d(M3D::Identity());
+M3F Eye3f(M3F::Identity());
+V3D Zero3d(0, 0, 0);
+V3F Zero3f(0, 0, 0);
+
+
+*/
+
 V3F XAxisPoint_body(LIDAR_SP_LEN, 0.0, 0.0);
 V3F XAxisPoint_world(LIDAR_SP_LEN, 0.0, 0.0);
 V3D euler_cur;
 V3D position_last(Zero3d);
-V3D Lidar_T_wrt_IMU(Zero3d);
-M3D Lidar_R_wrt_IMU(Eye3d);
+V3D Lidar_T_wrt_IMU(Zero3d);   
+M3D Lidar_R_wrt_IMU(Eye3d);   
 
 /*** EKF inputs and output ***/
 MeasureGroup Measures;
@@ -626,13 +639,13 @@ void set_posestamp(T & out)
     out.pose.orientation.z = q_grav.z();
     out.pose.orientation.w = q_grav.w();
 
-    // out.pose.position.x = state_point.pos(0);
-    // out.pose.position.y = state_point.pos(1);
-    // out.pose.position.z = state_point.pos(2);
-    // out.pose.orientation.x = geoQuat.x;
-    // out.pose.orientation.y = geoQuat.y;
-    // out.pose.orientation.z = geoQuat.z;
-    // out.pose.orientation.w = geoQuat.w;
+    /*out.pose.position.x = state_point.pos(0);
+    out.pose.position.y = state_point.pos(1);
+    out.pose.position.z = state_point.pos(2);
+    out.pose.orientation.x = geoQuat.x;
+    out.pose.orientation.y = geoQuat.y;
+    out.pose.orientation.z = geoQuat.z;
+    out.pose.orientation.w = geoQuat.w;*/
     
 }
 

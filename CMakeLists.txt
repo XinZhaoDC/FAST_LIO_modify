@@ -54,10 +54,19 @@ find_package(catkin REQUIRED COMPONENTS
   livox_ros_driver
   message_generation
   eigen_conversions
+
+# colorscan by xinzhao
+  dynamic_reconfigure
+  tf2
+  pcl_conversions
+  rosbag
+  image_transport
+  cv_bridge
 )
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.8 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 message(Eigen: ${EIGEN3_INCLUDE_DIR})
 
@@ -76,6 +85,8 @@ add_message_files(
 generate_messages(
  DEPENDENCIES
  geometry_msgs
+# colorscan by xinzhao
+ std_msgs
 )
 
 catkin_package(
@@ -85,5 +96,7 @@ catkin_package(
 )
 
 add_executable(fastlio_mapping src/laserMapping.cpp include/ikd-Tree/ikd_Tree.cpp src/preprocess.cpp)
+add_executable(colorScan src/colorScan.cpp)
 target_link_libraries(fastlio_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+target_link_libraries(colorScan ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
