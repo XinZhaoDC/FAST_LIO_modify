@@ -66,6 +66,7 @@ find_package(catkin REQUIRED COMPONENTS
 
 find_package(Eigen3 REQUIRED)
 find_package(PCL 1.8 REQUIRED)
+
 find_package(OpenCV REQUIRED)
 
 message(Eigen: ${EIGEN3_INCLUDE_DIR})
@@ -75,6 +76,7 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
   ${PCL_INCLUDE_DIRS}
   ${PYTHON_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
   include)
 
 add_message_files(
@@ -98,5 +100,17 @@ catkin_package(
 add_executable(fastlio_mapping src/laserMapping.cpp include/ikd-Tree/ikd_Tree.cpp src/preprocess.cpp)
 add_executable(colorScan src/colorScan.cpp)
 target_link_libraries(fastlio_mapping ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+
 target_link_libraries(colorScan ${catkin_LIBRARIES} ${OpenCV_LIBRARIES})
 target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+target_include_directories(fastlio_mapping PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+add_executable(rosbag_edit dataset/rosbag_edit.cpp)
+target_link_libraries(rosbag_edit ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES})
+target_include_directories(rosbag_edit PRIVATE ${PYTHON_INCLUDE_DIRS})
+
+add_executable(generate_block dataset/generate_block.cpp)
+target_link_libraries(generate_block ${catkin_LIBRARIES} ${PCL_LIBRARIES} ${PYTHON_LIBRARIES} ${OpenCV_LIBS})
+target_include_directories(generate_block PRIVATE ${PYTHON_INCLUDE_DIRS})
+
