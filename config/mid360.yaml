@@ -1,6 +1,6 @@
 common:
-    lid_topic:  "/livox/lidar"
-    imu_topic:  "/livox/imu"
+    lid_topic:  "/livox/lidar" #"/quad0_pcl_render_node/cloud"
+    imu_topic:  "/livox/imu" # "/quad_0/imu" 
     image_topic: "/camera/image/compressed"
     time_sync_en: false         # ONLY turn on when external time synchronization is really not possible
     time_offset_lidar_to_imu: 0.0 # Time offset between lidar and IMU calibrated by other algorithms, e.g. LI-Init (can be found in README).
